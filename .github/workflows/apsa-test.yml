@@ -27,7 +27,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Executar automacao APSA
-
+        env:
+          APSA_USER: ${{ secrets.APSA_USER }}
+          APSA_PASSWORD: ${{ secrets.APSA_PASSWORD }}
+        run: npm run apsa
 
       - name: Salvar boleto para teste
         if: always()
@@ -36,11 +39,3 @@ jobs:
           name: boleto-apsa
           path: automation/boleto-apsa.pdf
           if-no-files-found: ignore
-
-
-
-      
-        env:
-          APSA_USER: ${{ secrets.APSA_USER }}
-          APSA_PASSWORD: ${{ secrets.APSA_PASSWORD }}
-        run: npm run apsa
