@@ -144,25 +144,6 @@ if (download) {
 
 console.log('Teste do boleto concluído.');
 
-  const boleto = boletos.first();
-
-  // A APSA pode abrir o boleto em uma nova aba.
-  const [novaPagina] = await Promise.all([
-    context.waitForEvent('page').catch(() => null),
-    boleto.click()
-  ]);
-
-  if (novaPagina) {
-    await novaPagina.waitForLoadState('domcontentloaded');
-    console.log('Boleto aberto em nova aba.');
-    console.log(`URL do documento: ${novaPagina.url()}`);
-  } else {
-    await page.waitForTimeout(3000);
-    console.log('A APSA não abriu uma nova aba.');
-    console.log(`Página atual: ${page.url()}`);
-  }
-
-  console.log('Teste de abertura do boleto concluído.');
 }
 } catch (error) {
   console.error('Falha na automação APSA:');
