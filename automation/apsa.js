@@ -109,103 +109,73 @@ function agruparLinhasDaPagina(pagina) {
 function extrairLancamentosDetalhes(documento) {
   const pagina = documento.pages[0];
 
-  const itens = [...pagina.content]
-    .filter(item => item.str?.trim());
+  /*
+   * Mantém a ordem original dos objetos de texto do PDF.
+   * Não agrupa elementos da esquerda com elementos da direita.
+   */
+  const textoCompleto = pag*na.content
+    .map(item => String*item.str || '').trim())
+    .filte*(Boolean)
+    .join(' ')
+    .repl*ce(/\s+/g, ' ')
+    .trim();
 
-  const cabecalho = itens.find(item =>
-    normalizarTexto(item.str).includes('DETALHES DO RECIBO')
+  co*st textoNormalizado = normalizarTe*to(textoCompleto);
+
+  const marcadorInicio = 'DETALHES DO RECIBO';
+  const marcadorFim = 'POSICAO FINANCEIRA';
+
+  const inicio = textoNormalizado.indexOf(marcadorInicio);
+  const fim = textoNormalizado.indexOf(
+    marcadorFim,
+    inicio + marcadorInicio.length
   );
 
-  const proximaSecao = itens.find(item =>
-    normalizarTexto(item.str).includes('POSICAO FINANCEIRA')
-  );
-
-  if (!cabecalho) {
+  if (inicio === -1) {
     throw new Error(
       'A seção DETALHES DO RECIBO não foi encontrada.'
     );
   }
 
-  if (!proximaSecao) {
+  if (fim === -1) {
     throw new Error(
       'A seção POSIÇÃO FINANCEIRA não foi encontrada.'
     );
   }
 
-  console.log(
-    `Recortando Detalhes do Recibo entre Y=${cabecalho.y} e Y=${proximaSecao.y}`
-  );
-
-/*
- * O quadro DETALHES DO RECIBO está na coluna esquerda.
- * A coluna direita começa aproximadamente 310 pontos
- * depois do início do título.
- */
-const inicioEsquerdo = cabecalho.x - 5;
-const limiteDireito = cabecalho.x + 310;
-
-console.log(
-  `Área Detalhes do Recibo: X=${inicioEsquerdo} até X=${limiteDireito}`
-);
-
-const itensDetalhes = itens
-  .filter(item =>
-    item.y > cabecalho.y + 2 &&
-    item.y < proximaSecao.y - 2 &&
-    item.x >= inicioEsquerdo &&
-    item.x <= limiteDireito
-  )
-  .sort((a, b) => {
-    if (Math.abs(a.y - b.y) > 2) {
-      return a.y - b.y;
-    }
-
-    return a.x - b.x;
-  });
-  const linhas = [];
-
-  for (const item of itensDetalhes) {
-    let linha = linhas.find(
-      existente => Math.abs(existente.y - item.y) <= 2
-    );
-
-    if (!linha) {
-      linha = {
-        y: item.y,
-        itens: []
-      };
-
-      linhas.push(linha);
-    }
-
-    linha.itens.push(item);
-  }
-
-  const linhasTexto = linhas
-    .sort((a, b) => a.y - b.y)
-    .map(linha =>
-      linha.itens
-        .sort((a, b) => a.x - b.x)
-        .map(item => item.str.trim())
-        .filter(Boolean)
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim()
+  /*
+   * Recorta o texto original usando as mesmas posições.
+   * O resultado contém somente o que existe entre os dois títulos.
+   */
+  const trechoDetalhes = textoCompleto
+    .slice(
+      inicio + marcadorInicio.length,
+      fim
     )
-    .filter(Boolean);
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  console.log('Trecho exclusivo de Detalhes do Recibo:');
+  console.log(trechoDetalhes);
 
   const lancamentos = [];
 
-  for (const linha of linhasTexto) {
-    const correspondencia = linha.match(
-      /^(.*?)\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})\s*$/
-    );
+  /*
+   * Cada lançamento termina com um valor monetário.
+   * O próximo lançamento começa logo após esse valor.
+   */
+  const padraoLancamento =
+    /(.+?)\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})(?=\s+|$)/g;
 
-    if (!correspondencia) {
-      continue;
-    }
+  let correspondencia;
 
-    const descricao = correspondencia[1].trim();
+  while (
+    (correspondencia = padraoLancamento.exec(trechoDetalhes)) !== null
+  ) {
+    const descricao = correspondencia[1]
+      .replace(/\s+/g, ' ')
+      .trim();
+
     const valorTexto = correspondencia[2];
 
     if (!descricao || descricao.length < 3) {
@@ -220,11 +190,17 @@ const itensDetalhes = itens
     });
   }
 
+  console.log(
+    `Lançamentos extraídos exclusivamente do recibo: ${lancamentos.length}`
+  );
+
   return {
-    linhas: linhasTexto,
+    linhas: [trechoDetalhes],
     lancamentos
   };
 }
+
+
 
 function extrairTotalBoleto(documento) {
   const pagina = documento.pages[0];
