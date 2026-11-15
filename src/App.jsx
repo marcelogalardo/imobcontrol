@@ -31,8 +31,11 @@ function AuthScreen({ onAuth }) {
   const [error, setError] = useState('');
   const submit = async (e) => {
     e.preventDefault(); setBusy(true); setError('');
-    const fn = mode === 'signin' ? supabase.auth.signInWithPassword : supabase.auth.signUp;
-    const { data, error: err } = await fn({ email, password });
+    
+    const { data, error: err } = mode === 'signin'
+      ? await supabase.auth.signInWithPassword({ email, password })
+      : await supabase.auth.signUp({ email, password });
+    
     setBusy(false);
     if (err) return setError(err.message);
     if (data.session) onAuth(data.session.user);
