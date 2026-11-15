@@ -223,37 +223,89 @@ const itensDetalhes = itens
 }
 
 function extrairTotalBoleto(documento) {
-  const linhas = documento.pages.flatMap(agruparLinhasDaPagina);
+  const pagina = documento.pages[0];
 
-  const candidatas = linhas.filter(linha => {
-    const texto = normalizarTexto(linha);
+  const itens = [...pagina.content]
+    .filter(item => item.str?.trim());
+
+  const converterValorDoItem = item => {
+    const resultado = String(item.str).match(
+      /R?\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2})/
+    );
+
+    return resultado
+      ? moedaParaNumero(resultado[1])
+      : null;
+  };
+
+  const rotulosPrioritarios = itens.filter(item => {
+    const texto = normalizarTexto(item.str);
 
     return (
       texto.includes('VALOR DO DOCUMENTO') ||
-      texto.includes('VALOR R$') ||
-      texto.includes('VALOR')
+      texto === 'VALOR'
     );
   });
 
-  for (const linha of candidatas) {
-    const valores = [
-      ...linha.matchAll(
-        /R?\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2})/g
+  for (const rotulo of rotulosPrioritarios) {
+    const candidatos = itens
+      .map(item => ({
+        item,
+        valor: converterValorDoItem(item)
+      }))
+      .filter(candidato =>
+        candidato.valor !== null &&
+        Math.abs(candidato.item.y - rotulo.y) <= 15
       )
-    ];
+      .sort((a, b) => {
+        const distanciaA =
+          Math.abs(a.item.y - rotulo.y) +
+          Math.abs(a.item.x - rotulo.x);
 
-    if (valores.length) {
-      return moedaParaNumero(
-        valores[valores.length - 1][1]
+        const distanciaB =
+          Math.abs(b.item.y - rotulo.y) +
+          Math.abs(b.item.x - rotulo.x);
+
+        return distanciaA - distanciaB;
+      });
+
+    if (candidatos.length) {
+      console.log(
+        `Total localizado próximo de "${rotulo.str}": ${candidatos[0].valor}`
       );
+
+      return candidatos[0].valor;
     }
+  }
+
+  /*
+   * Alternativa: procura valores escritos explicitamente com R$.
+   * O total do boleto da APSA aparece dessa forma no cabeçalho.
+   */
+  const valoresComCifrao = itens
+    .map(item => {
+      const resultado = String(item.str).match(
+        /R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})/
+      );
+
+      return resultado
+        ? moedaParaNumero(resultado[1])
+        : null;
+    })
+    .filter(valor => valor !== null);
+
+  if (valoresComCifrao.length) {
+    console.log(
+      `Total localizado pelo símbolo R$: ${valoresComCifrao[0]}`
+    );
+
+    return valoresComCifrao[0];
   }
 
   throw new Error(
     'Não foi possível identificar o total do boleto.'
   );
 }
-
 
 function arredondar(valor) {
   return Math.round((valor + Number.EPSILON) * 100) / 100;
