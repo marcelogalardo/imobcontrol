@@ -114,10 +114,9 @@ const pdfPromise = page.waitForResponse(
   response => {
     const contentType = response.headers()['content-type'] || '';
 
-    return (
-      contentType.includes('application/pdf') ||
-      response.url().toLowerCase().includes('.pdf')
-    );
+    return contentType.toLowerCase().includes('application/pdf');  
+
+    
   },
   { timeout: 15000 }
 ).catch(() => null);
