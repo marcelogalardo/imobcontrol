@@ -46,7 +46,7 @@ function AuthScreen({ onAuth }) {
     let result;
 
     if (mode === 'signin') {
-      result = await supabase.auth.signInWithPassword({
+      result = await supabase.auth.signInWithPassword.call(supabase.auth, {
         email,
         password
       });
