@@ -106,28 +106,93 @@ function agruparLinhasDaPagina(pagina) {
     .filter(Boolean);
 }
 
-function extrairLancamentos(linhas) {
-  const inicio = linhas.findIndex(linha =>
-    normalizarTexto(linha).includes('DETALHES DO RECIBO')
+function extrairLancamentosDetalhes(documento) {
+  const pagina = documento.pages[0];
+
+  const itens = [...pagina.content]
+    .filter(item => item.str?.trim());
+
+  const cabecalho = itens.find(item =>
+    normalizarTexto(item.str).includes('DETALHES DO RECIBO')
   );
 
-  const linhasParaAnalisar =
-    inicio >= 0 ? linhas.slice(inicio + 1) : linhas;
+  const proximaSecao = itens.find(item =>
+    normalizarTexto(item.str).includes('POSICAO FINANCEIRA')
+  );
+
+  if (!cabecalho) {
+    throw new Error(
+      'A seção DETALHES DO RECIBO não foi encontrada.'
+    );
+  }
+
+  if (!proximaSecao) {
+    throw new Error(
+      'A seção POSIÇÃO FINANCEIRA não foi encontrada.'
+    );
+  }
+
+  console.log(
+    `Recortando Detalhes do Recibo entre Y=${cabecalho.y} e Y=${proximaSecao.y}`
+  );
+
+  const larguraPagina = pagina.pageInfo?.width || 612;
+
+/*
+ * O quadro Detalhes do Recibo ocupa a metade esquerda.
+ * A prestação de contas começa na coluna direita.
+ */
+const limiteDireito = larguraPagina * 0.54;
+
+const itensDetalhes = itens
+  .filter(item =>
+    item.y > cabecalho.y + 2 &&
+    item.y < proximaSecao.y - 2 &&
+    item.x < limiteDireito
+  )
+  .sort((a, b) => {
+    if (Math.abs(a.y - b.y) > 2) {
+      return a.y - b.y;
+    }
+
+    return a.x - b.x;
+  });
+
+  const linhas = [];
+
+  for (const item of itensDetalhes) {
+    let linha = linhas.find(
+      existente => Math.abs(existente.y - item.y) <= 2
+    );
+
+    if (!linha) {
+      linha = {
+        y: item.y,
+        itens: []
+      };
+
+      linhas.push(linha);
+    }
+
+    linha.itens.push(item);
+  }
+
+  const linhasTexto = linhas
+    .sort((a, b) => a.y - b.y)
+    .map(linha =>
+      linha.itens
+        .sort((a, b) => a.x - b.x)
+        .map(item => item.str.trim())
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    )
+    .filter(Boolean);
 
   const lancamentos = [];
 
-  for (const linha of linhasParaAnalisar) {
-    const normalizada = normalizarTexto(linha);
-
-    if (
-      normalizada.includes('TOTAL DO RECIBO') ||
-      normalizada.includes('VALOR DO DOCUMENTO') ||
-      normalizada.includes('PAGADOR') ||
-      normalizada.includes('BENEFICIARIO')
-    ) {
-      continue;
-    }
-
+  for (const linha of linhasTexto) {
     const correspondencia = linha.match(
       /^(.*?)\s+(-?\d{1,3}(?:\.\d{3})*,\d{2})\s*$/
     );
@@ -151,12 +216,52 @@ function extrairLancamentos(linhas) {
     });
   }
 
-  return lancamentos;
+  return {
+    linhas: linhasTexto,
+    lancamentos
+  };
 }
+
+function extrairTotalBoleto(documento) {
+  const linhas = documento.pages.flatMap(agruparLinhasDaPagina);
+
+  const candidatas = linhas.filter(linha => {
+    const texto = normalizarTexto(linha);
+
+    return (
+      texto.includes('VALOR DO DOCUMENTO') ||
+      texto.includes('VALOR R$') ||
+      texto.includes('VALOR')
+    );
+  });
+
+  for (const linha of candidatas) {
+    const valores = [
+      ...linha.matchAll(
+        /R?\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2})/g
+      )
+    ];
+
+    if (valores.length) {
+      return moedaParaNumero(
+        valores[valores.length - 1][1]
+      );
+    }
+  }
+
+  throw new Error(
+    'Não foi possível identificar o total do boleto.'
+  );
+}
+
 
 function arredondar(valor) {
   return Math.round((valor + Number.EPSILON) * 100) / 100;
 }
+
+
+
+
 
 async function analisarBoleto(pdfBuffer) {
   const extrator = new PDFExtract();
@@ -165,8 +270,12 @@ async function analisarBoleto(pdfBuffer) {
     normalizeWhitespace: true
   });
 
-  const linhas = documento.pages.flatMap(agruparLinhasDaPagina);
-  const lancamentos = extrairLancamentos(linhas);
+  const detalhes = extrairLancamentosDetalhes(documento);
+  const lancamentos = detalhes.lancamentos;
+
+  const totalBoleto = arredondar(
+    extrairTotalBoleto(documento)
+  );
 
   const totalInquilino = arredondar(
     lancamentos
@@ -186,23 +295,55 @@ async function analisarBoleto(pdfBuffer) {
       .reduce((soma, item) => soma + item.valor, 0)
   );
 
-  const totalClassificado = arredondar(
-    totalInquilino + totalProprietario + totalRevisar
+  const totalLancamentos = arredondar(
+    lancamentos.reduce(
+      (soma, item) => soma + item.valor,
+      0
+    )
   );
+
+  const diferenca = arredondar(
+    totalBoleto - totalLancamentos
+  );
+
+  const valoresConferem =
+    Math.abs(diferenca) <= 0.01;
+
+  const possuiItensParaRevisar =
+    lancamentos.some(
+      item => item.responsavel === 'revisar'
+    );
 
   return {
     quantidade_paginas: documento.pages.length,
     quantidade_lancamentos: lancamentos.length,
+
     lancamentos,
+
     totais: {
+      boleto: totalBoleto,
+      lancamentos: totalLancamentos,
       inquilino: totalInquilino,
       proprietario: totalProprietario,
       revisar: totalRevisar,
-      classificado: totalClassificado
+      diferenca
     },
-    linhas_extraidas: linhas
+
+    validacao: {
+      valores_conferem: valoresConferem,
+      tolerancia: 0.01,
+      possui_itens_para_revisar: possuiItensParaRevisar,
+      status:
+        valoresConferem && !possuiItensParaRevisar
+          ? 'aprovado'
+          : 'revisar'
+    },
+
+    linhas_detalhes_recibo: detalhes.linhas
   };
 }
+
+
 
 const browser = await chromium.launch({
   headless: true
@@ -357,38 +498,57 @@ for (const item of analise.lancamentos) {
   );
 }
 
+
 console.log('Resumo da divisão:');
 
-console.log(
-  `Inquilino: ${analise.totais.inquilino.toLocaleString('pt-BR', {
+const formatarMoeda = valor =>
+  valor.toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL'
-  })}`
+  });
+
+console.log(
+  `Total do boleto: ${formatarMoeda(analise.totais.boleto)}`
 );
 
 console.log(
-  `Proprietário: ${analise.totais.proprietario.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
-  })}`
-);
-
-console.log(
-  `Revisar: ${analise.totais.revisar.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
-  })}`
-);
-
-console.log(
-  `Total classificado: ${analise.totais.classificado.toLocaleString(
-    'pt-BR',
-    {
-      style: 'currency',
-      currency: 'BRL'
-    }
+  `Total dos lançamentos: ${formatarMoeda(
+    analise.totais.lancamentos
   )}`
 );
+
+console.log(
+  `Inquilino: ${formatarMoeda(analise.totais.inquilino)}`
+);
+
+console.log(
+  `Proprietário: ${formatarMoeda(
+    analise.totais.proprietario
+  )}`
+);
+
+console.log(
+  `Revisar: ${formatarMoeda(analise.totais.revisar)}`
+);
+
+console.log(
+  `Diferença: ${formatarMoeda(analise.totais.diferenca)}`
+);
+
+console.log(
+  `Conferência: ${
+    analise.validacao.valores_conferem
+      ? 'VALORES CONFEREM'
+      : 'VALORES NÃO CONFEREM'
+  }`
+);
+
+console.log(
+  `Status final: ${analise.validacao.status.toUpperCase()}`
+);
+
+  
+
 
 await fs.writeFile(
   './resumo-apsa.json',
