@@ -131,11 +131,36 @@ function App() {
     if (error) { notify(error.message); return false; }
     setModal(null); await refresh(); notify(id ? 'Registro atualizado.' : 'Registro cadastrado.'); return true;
   };
+
   const deleteRecord = async (table, id) => {
-    if (!window.confirm('Tem certeza que deseja excluir este registro?')) return;
-    const { error } = await supabase.from(table).delete().eq('id', id);
-    if (error) notify(error.message); else { await refresh(); notify('Registro excluído.'); }
-  };
+  if (!window.confirm('Tem certeza que deseja excluir este registro?')) return;
+
+  const { error } = await supabase
+    .from(table)
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    if (error.code === '23503') {
+      if (table === 'expense_types') {
+        notify('Despesa vinculada a um imóvel. Desvincule a despesa antes de excluir.');
+      } else if (table === 'providers') {
+        notify('Fornecedor vinculado a uma despesa. Remova o vínculo antes de excluir.');
+      } else if (table === 'properties') {
+        notify('Imóvel possui despesas vinculadas. Desvincule as despesas antes de excluir.');
+      } else {
+        notify('Este cadastro possui vínculos. Remova os vínculos antes de excluir.');
+      }
+      return;
+    }
+
+    notify(error.message);
+    return;
+  }
+
+  await refresh();
+  notify('Registro excluído.');
+};
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileNav?'show':''}`}>
