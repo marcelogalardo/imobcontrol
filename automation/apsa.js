@@ -113,15 +113,14 @@ function extrairLancamentosDetalhes(documento) {
    * Mantém a ordem original dos objetos de texto do PDF.
    * Não agrupa elementos da esquerda com elementos da direita.
    */
-  const textoCompleto = pag*na.content
+  const textoCompleto = pagina.content
     .map(item => String(item.str || '').trim())
-    .filte*(Boolean)
+    .filter(Boolean)
     .join(' ')
-    .repl*ce(/\s+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 
-  co*st textoNormalizado = normalizarTe*to(textoCompleto);
-
+  const textoNormalizado = normalizarTexto(textoCompleto);
   const marcadorInicio = 'DETALHES DO RECIBO';
   const marcadorFim = 'POSICAO FINANCEIRA';
 
