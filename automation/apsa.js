@@ -133,6 +133,13 @@ if (pdfResponse) {
   console.log(
     `Assinatura: ${pdfBuffer.subarray(0, 5).toString()}`
   );
+
+  if (pdfBuffer.subarray(0, 5).toString() !== '%PDF-') {
+  throw new Error(
+    'A resposta capturada não é um PDF válido.'
+  );
+}
+  
   const fs = await import('node:fs/promises');
 
   await fs.writeFile(
