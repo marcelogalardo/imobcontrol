@@ -194,7 +194,28 @@ function InvoiceTable({invoices,data}) {return <TableShell headers={['Documento'
 
 function RecordModal({modal,data,onClose,onSave}) {
   const {kind,item}=modal; const [form,setForm]=useState({}); const [busy,setBusy]=useState(false);
-  useEffect(()=>{setForm(item||{active:true, portal_type:'web', billing_frequency:'monthly'});},[item,kind]);
+  useEffect(() => {
+  if (item) {
+    setForm(item);
+    return;
+  }
+
+  if (kind === 'property_expense') {
+    setForm({
+      active: true,
+      billing_frequency: 'monthly'
+    });
+  } else if (kind === 'provider') {
+    setForm({
+      active: true,
+      portal_type: 'web'
+    });
+  } else {
+    setForm({
+      active: true
+    });
+  }
+}, [item, kind]);
   const set=(key,value)=>setForm(old=>({...old,[key]:value}));
   const configs={
     property:{title:'Imóvel',table:'properties',fields:[['code','Código / identificação','text',true],['nickname','Nome amigável','text'],['address','Endereço','text'],['notes','Observações','textarea'],['active','Imóvel ativo','checkbox']]},
