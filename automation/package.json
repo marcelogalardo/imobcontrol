@@ -6,6 +6,7 @@
     "apsa": "node apsa.js"
   },
   "dependencies": {
+    "pdf.js-extract": "1.0.1",
     "playwright": "1.52.0"
   }
 }
