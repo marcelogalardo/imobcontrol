@@ -30,6 +30,8 @@ jobs:
         env:
           APSA_USER: ${{ secrets.APSA_USER }}
           APSA_PASSWORD: ${{ secrets.APSA_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: npm run apsa
 
       - name: Salvar boleto para teste
