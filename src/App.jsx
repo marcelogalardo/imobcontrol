@@ -169,5 +169,3 @@ function RecordModal({modal,data,onClose,onSave}) {
 }
 
 export default App;
-
-export default App;
