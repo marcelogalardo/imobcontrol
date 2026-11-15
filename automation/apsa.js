@@ -105,44 +105,52 @@ if (quantidade === 0) {
   console.log('Página de boletos acessada com sucesso.');
   console.log('Abrindo boleto...');
 
+
 const boleto = boletos.first();
 
-const downloadPromise = page
-  .waitForEvent('download', { timeout: 10000 })
-  .catch(() => null);
+console.log('Monitorando resposta do boleto...');
 
-const popupPromise = context
-  .waitForEvent('page', { timeout: 10000 })
-  .catch(() => null);
+const pdfPromise = page.waitForResponse(
+  response => {
+    const contentType = response.headers()['content-type'] || '';
+
+    return (
+      contentType.includes('application/pdf') ||
+      response.url().toLowerCase().includes('.pdf')
+    );
+  },
+  { timeout: 15000 }
+).catch(() => null);
 
 await boleto.click();
 
-const [download, novaPagina] = await Promise.all([
-  downloadPromise,
-  popupPromise
-]);
+const pdfResponse = await pdfPromise;
 
-if (download) {
-  const nomeArquivo = download.suggestedFilename();
-  const destino = `./${nomeArquivo}`;
+if (pdfResponse) {
+  console.log('PDF detectado.');
 
-  await download.saveAs(destino);
+  const pdfBuffer = await pdfResponse.body();
 
-  console.log('Boleto baixado com sucesso.');
-  console.log(`Arquivo: ${nomeArquivo}`);
-} else if (novaPagina) {
-  await novaPagina.waitForLoadState('domcontentloaded');
+  const fs = await import('node:fs/promises');
 
-  console.log('Boleto aberto em nova aba.');
-  console.log(`URL do documento: ${novaPagina.url()}`);
+  await fs.writeFile(
+    './boleto-apsa.pdf',
+    pdfBuffer
+  );
+
+  console.log('Boleto salvo com sucesso.');
+  console.log('Arquivo: boleto-apsa.pdf');
 } else {
-  await page.waitForTimeout(2000);
+  console.log('A resposta PDF não foi detectada.');
 
-  console.log('Nenhum download ou nova aba foi detectado.');
+  await page.waitForTimeout(3000);
+
   console.log(`Página atual: ${page.url()}`);
 }
 
 console.log('Teste do boleto concluído.');
+
+  
 
 }
 } catch (error) {
