@@ -136,10 +136,24 @@ function extrairLancamentosDetalhes(documento) {
     `Recortando Detalhes do Recibo entre Y=${cabecalho.y} e Y=${proximaSecao.y}`
   );
 
+/*
+ * O quadro DETALHES DO RECIBO está na coluna esquerda.
+ * A coluna direita começa aproximadamente 310 pontos
+ * depois do início do título.
+ */
+const inicioEsquerdo = cabecalho.x - 5;
+const limiteDireito = cabecalho.x + 310;
+
+console.log(
+  `Área Detalhes do Recibo: X=${inicioEsquerdo} até X=${limiteDireito}`
+);
+
 const itensDetalhes = itens
   .filter(item =>
     item.y > cabecalho.y + 2 &&
-    item.y < proximaSecao.y - 2
+    item.y < proximaSecao.y - 2 &&
+    item.x >= inicioEsquerdo &&
+    item.x <= limiteDireito
   )
   .sort((a, b) => {
     if (Math.abs(a.y - b.y) > 2) {
@@ -148,7 +162,6 @@ const itensDetalhes = itens
 
     return a.x - b.x;
   });
-
   const linhas = [];
 
   for (const item of itensDetalhes) {
