@@ -527,6 +527,39 @@ async function gravarFaturaNoSupabase(pdfBuffer, analise) {
     imported_at: new Date().toISOString()
   };
 
+const itemCondominio = analise.lancamentos.find(
+  item => item.descricao_normalizada.includes('CONDOMINIO')
+);
+
+if (!itemCondominio) {
+  throw new Error(
+    'Não foi possível identificar a referência do condomínio.'
+  );
+}
+
+const referencia = itemCondominio.descricao.match(
+  /(\d{2})\/(\d{4})/
+);
+
+if (!referencia) {
+  throw new Error(
+    `Não foi possível extrair mês/ano de: ${itemCondominio.descricao}`
+  );
+}
+
+const [, mesReferencia, anoReferencia] = referencia;
+
+/*
+ * reference_month é uma coluna date.
+ * Usamos o primeiro dia do mês como referência.
+ */
+const referenceMonth =
+  `${anoReferencia}-${mesReferencia}-01`;
+
+console.log(
+  `Mês de referência identificado: ${referenceMonth}`
+);
+  
   console.log('Criando registro na tabela invoices...');
 
   const { data: novaFatura, error: erroInsert } =
@@ -535,7 +568,8 @@ async function gravarFaturaNoSupabase(pdfBuffer, analise) {
       .insert({
         owner_id: despesa.owner_id,
         property_expense_id: despesa.id,
-        invoice_number: numeroFatura,
+        reference_month: referenceMonth,
+        invoice_number: numeroFatura,        
         amount: analise.totais.boleto,
         status,
         storage_path: arquivo.path,
