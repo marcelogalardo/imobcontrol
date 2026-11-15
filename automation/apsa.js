@@ -99,11 +99,32 @@ try {
   console.log(`Boletos encontrados: ${quantidade}`);
   console.log(`Página atual: ${page.url()}`);
 
-  if (quantidade === 0) {
-    console.log('Nenhum boleto disponível no portal.');
+if (quantidade === 0) {
+  console.log('Nenhum boleto disponível no portal.');
+} else {
+  console.log('Página de boletos acessada com sucesso.');
+  console.log('Abrindo boleto...');
+
+  const boleto = boletos.first();
+
+  // A APSA pode abrir o boleto em uma nova aba.
+  const [novaPagina] = await Promise.all([
+    context.waitForEvent('page').catch(() => null),
+    boleto.click()
+  ]);
+
+  if (novaPagina) {
+    await novaPagina.waitForLoadState('domcontentloaded');
+    console.log('Boleto aberto em nova aba.');
+    console.log(`URL do documento: ${novaPagina.url()}`);
   } else {
-    console.log('Página de boletos acessada com sucesso.');
+    await page.waitForTimeout(3000);
+    console.log('A APSA não abriu uma nova aba.');
+    console.log(`Página atual: ${page.url()}`);
   }
+
+  console.log('Teste de abertura do boleto concluído.');
+}
 } catch (error) {
   console.error('Falha na automação APSA:');
   console.error(error.message);
