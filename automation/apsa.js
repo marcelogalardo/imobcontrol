@@ -129,8 +129,10 @@ const pdfResponse = await pdfPromise;
 if (pdfResponse) {
   console.log('PDF detectado.');
 
-  const pdfBuffer = await pdfResponse.body();
-
+  console.log(`Tamanho recebido: ${pdfBuffer.length} bytes`);
+  console.log(
+    `Assinatura: ${pdfBuffer.subarray(0, 5).toString()}`
+  );
   const fs = await import('node:fs/promises');
 
   await fs.writeFile(
