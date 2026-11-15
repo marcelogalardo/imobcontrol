@@ -1,0 +1,11 @@
+{
+  "name": "imobcontrol-automation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "apsa": "node apsa.js"
+  },
+  "dependencies": {
+    "playwright": "1.52.0"
+  }
+}
