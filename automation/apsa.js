@@ -129,31 +129,23 @@ const pdfResponse = await pdfPromise;
 if (pdfResponse) {
   console.log('PDF detectado.');
 
+  const pdfBuffer = await pdfResponse.body();
+
   console.log(`Tamanho recebido: ${pdfBuffer.length} bytes`);
-  console.log(
-    `Assinatura: ${pdfBuffer.subarray(0, 5).toString()}`
-  );
+  console.log(`Assinatura: ${pdfBuffer.subarray(0, 5).toString()}`);
 
   if (pdfBuffer.subarray(0, 5).toString() !== '%PDF-') {
-  throw new Error(
-    'A resposta capturada não é um PDF válido.'
-  );
-}
-  
+    throw new Error('A resposta capturada não é um PDF válido.');
+  }
+
   const fs = await import('node:fs/promises');
 
-  await fs.writeFile(
-    './boleto-apsa.pdf',
-    pdfBuffer
-  );
+  await fs.writeFile('./boleto-apsa.pdf', pdfBuffer);
 
   console.log('Boleto salvo com sucesso.');
   console.log('Arquivo: boleto-apsa.pdf');
 } else {
   console.log('A resposta PDF não foi detectada.');
-
-  await page.waitForTimeout(3000);
-
   console.log(`Página atual: ${page.url()}`);
 }
 
