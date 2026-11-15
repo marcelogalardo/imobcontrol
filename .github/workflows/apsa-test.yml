@@ -1,0 +1,35 @@
+name: Testar automacao APSA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  testar-apsa:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: automation
+
+    steps:
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: automation/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Executar automacao APSA
+        env:
+          APSA_USER: ${{ secrets.APSA_USER }}
+          APSA_PASSWORD: ${{ secrets.APSA_PASSWORD }}
+        run: npm run apsa
