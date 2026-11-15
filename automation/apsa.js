@@ -136,19 +136,10 @@ function extrairLancamentosDetalhes(documento) {
     `Recortando Detalhes do Recibo entre Y=${cabecalho.y} e Y=${proximaSecao.y}`
   );
 
-  const larguraPagina = pagina.pageInfo?.width || 612;
-
-/*
- * O quadro Detalhes do Recibo ocupa a metade esquerda.
- * A prestação de contas começa na coluna direita.
- */
-const limiteDireito = larguraPagina * 0.54;
-
 const itensDetalhes = itens
   .filter(item =>
     item.y > cabecalho.y + 2 &&
-    item.y < proximaSecao.y - 2 &&
-    item.x < limiteDireito
+    item.y < proximaSecao.y - 2
   )
   .sort((a, b) => {
     if (Math.abs(a.y - b.y) > 2) {
