@@ -114,7 +114,7 @@ function extrairLancamentosDetalhes(documento) {
    * Não agrupa elementos da esquerda com elementos da direita.
    */
   const textoCompleto = pag*na.content
-    .map(item => String*item.str || '').trim())
+    .map(item => String(item.str || '').trim())
     .filte*(Boolean)
     .join(' ')
     .repl*ce(/\s+/g, ' ')
