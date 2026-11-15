@@ -51,7 +51,7 @@ function AuthScreen({ onAuth }) {
         password
       });
     } else {
-      result = await supabase.auth.signUp({
+      result = await supabase.auth.signUp.call(supabase.auth, {
         email,
         password
       });
