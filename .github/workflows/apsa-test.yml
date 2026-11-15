@@ -37,5 +37,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: boleto-apsa
-          path: automation/boleto-apsa.pdf
+          path: |
+            automation/boleto-apsa.pdf
+            automation/resumo-apsa.json
           if-no-files-found: ignore
