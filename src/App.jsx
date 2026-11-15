@@ -29,18 +29,50 @@ function AuthScreen({ onAuth }) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const submit = async (e) => {
-    e.preventDefault(); setBusy(true); setError('');
-    
-    const { data, error: err } = mode === 'signin'
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
-    
+  
+  
+  
+ const submit = async (e) => {
+  e.preventDefault();
+  setBusy(true);
+  setError('');
+
+  try {
+    let result;
+
+    if (mode === 'signin') {
+      result = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+    } else {
+      result = await supabase.auth.signUp({
+        email,
+        password
+      });
+    }
+
+    const { data, error: err } = result;
+
+    if (err) {
+      setError(err.message);
+      return;
+    }
+
+    if (data.session) {
+      onAuth(data.session.user);
+    } else {
+      setError('Cadastro iniciado. Verifique seu e-mail para confirmar a conta e depois entre.');
+    }
+  } catch (err) {
+    console.error('Erro de autenticação:', err);
+    setError(err?.message || 'Erro ao conectar com o Supabase.');
+  } finally {
     setBusy(false);
-    if (err) return setError(err.message);
-    if (data.session) onAuth(data.session.user);
-    else setError('Cadastro iniciado. Verifique seu e-mail para confirmar a conta e depois entre.');
-  };
+  }
+}; 
+ 
+  
   return <div className="auth-wrap"><div className="auth-card">
     <div className="brand-mark"><Building2 size={23}/></div><div className="eyebrow">GESTÃO IMOBILIÁRIA</div>
     <h1>ImobControl</h1><p className="muted">Suas despesas, imóveis e faturas em um só lugar.</p>
