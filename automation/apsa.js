@@ -642,39 +642,48 @@ try {
 
   console.log('Login realizado.');
 
-  const minhaUnidade = page.getByRole('link', {
-    name: /MINHA UNIDADE/i
-  });
+console.log('Abrindo menu Minha Unidade...');
 
-  if (await minhaUnidade.isVisible()) {
-    await minhaUnidade.click();
-    await page.waitForTimeout(500);
-  }
+const minhaUnidade = page.getByRole('link', {
+  name: /MINHA UNIDADE/i
+});
 
-  const financeiro = page.getByRole('link', {
-    name: /Financeiro da unidade/i
-  });
+await minhaUnidade.waitFor({
+  state: 'visible',
+  timeout: 30000
+});
 
-  if (await financeiro.isVisible()) {
-    await financeiro.click();
-    await page.waitForTimeout(500);
-  }
+await minhaUnidade.click();
+await page.waitForTimeout(1000);
 
-  const segundaVia = page.getByRole('link', {
-    name: /2ª via de boleto/i
-  });
+console.log('Abrindo Financeiro da unidade...');
 
-  await segundaVia.waitFor({
-    state: 'visible',
-    timeout: 15000
-  });
+const financeiro = page.getByRole('link', {
+  name: /Financeiro da unidade/i
+});
 
-  console.log('Abrindo 2ª via de boleto...');
+await financeiro.waitFor({
+  state: 'visible',
+  timeout: 15000
+});
 
-  await Promise.all([
-    page.waitForLoadState('domcontentloaded'),
-    segundaVia.click()
-  ]);
+await financeiro.click();
+await page.waitForTimeout(1000);
+
+console.log('Abrindo 2ª via de boleto...');
+
+const segundaVia = page.getByRole('link', {
+  name: /2ª via de boleto/i
+});
+
+await segundaVia.waitFor({
+  state: 'visible',
+  timeout: 30000
+});
+
+await segundaVia.click();
+
+await page.waitForLoadState('domcontentloaded');
 
   await page.waitForTimeout(2000);
 
