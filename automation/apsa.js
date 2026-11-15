@@ -1,10 +1,35 @@
 import { chromium } from 'playwright';
 import { PDFExtract } from 'pdf.js-extract';
+import { createClient } from '@supabase/supabase-js';
+import { createHash } from 'node:crypto';
+
 
 const APSA_URL = 'https://areadocliente.apsa.com.br/';
 
 const usuario = process.env.APSA_USER;
 const senha = process.env.APSA_PASSWORD;
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
+
+if (!supabaseUrl || !supabaseSecretKey) {
+  console.error(
+    'SUPABASE_URL ou SUPABASE_SECRET_KEY não configurados.'
+  );
+  process.exit(1);
+}
+
+const supabaseAdmin = createClient(
+  supabaseUrl,
+  supabaseSecretKey,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false
+    }
+  }
+);
 
 if (!usuario || !senha) {
   console.error('APSA_USER ou APSA_PASSWORD não configurados.');
@@ -374,7 +399,204 @@ async function analisarBoleto(pdfBuffer) {
   };
 }
 
+async function gravarFaturaNoSupabase(pdfBuffer, analise) {
+  console.log('Localizando despesa APSA no Supabase...');
 
+  const { data: despesas, error: erroDespesas } =
+    await supabaseAdmin
+      .from('property_expenses')
+      .select(`
+        id,
+        owner_id,
+        label,
+        providers!inner(name)
+      `)
+      .eq('active', true)
+      .ilike('providers.name', '%APSA%');
+
+  if (erroDespesas) {
+    throw new Error(
+      `Erro ao localizar despesa APSA: ${erroDespesas.message}`
+    );
+  }
+
+  if (!despesas || despesas.length === 0) {
+    throw new Error(
+      'Nenhuma despesa ativa vinculada ao fornecedor APSA foi encontrada.'
+    );
+  }
+
+  if (despesas.length > 1) {
+    throw new Error(
+      `Foram encontradas ${despesas.length} despesas APSA ativas. ` +
+      'É necessário identificar a conta/unidade antes de gravar.'
+    );
+  }
+
+  const despesa = despesas[0];
+
+  console.log(`Despesa localizada: ${despesa.label}`);
+
+  /*
+   * O hash identifica unicamente o conteúdo do PDF.
+   * Se o mesmo boleto aparecer novamente, não será duplicado.
+   */
+  const hashPdf = createHash('sha256')
+    .update(pdfBuffer)
+    .digest('hex');
+
+  const identificador = hashPdf.slice(0, 16);
+  const numeroFatura = `APSA-${identificador}`;
+  const nomeArquivo = `${numeroFatura}.pdf`;
+
+  const storagePath =
+    `${despesa.owner_id}/apsa/${nomeArquivo}`;
+
+  console.log(`Identificador do boleto: ${numeroFatura}`);
+
+  const { data: faturaExistente, error: erroConsulta } =
+    await supabaseAdmin
+      .from('invoices')
+      .select('id, invoice_number, storage_path')
+      .eq('storage_path', storagePath)
+      .maybeSingle();
+
+  if (erroConsulta) {
+    throw new Error(
+      `Erro ao consultar duplicidade: ${erroConsulta.message}`
+    );
+  }
+
+  if (faturaExistente) {
+    console.log(
+      `Boleto já registrado: ${faturaExistente.invoice_number}`
+    );
+
+    return {
+      duplicado: true,
+      invoice_id: faturaExistente.id,
+      storage_path: faturaExistente.storage_path
+    };
+  }
+
+  console.log('Enviando PDF para o Supabase Storage...');
+
+  const { data: arquivo, error: erroUpload } =
+    await supabaseAdmin.storage
+      .from('invoices')
+      .upload(storagePath, pdfBuffer, {
+        contentType: 'application/pdf',
+        cacheControl: '3600',
+        upsert: false
+      });
+
+  if (erroUpload) {
+    throw new Error(
+      `Erro ao enviar PDF ao Storage: ${erroUpload.message}`
+    );
+  }
+
+  console.log(`PDF enviado: ${arquivo.path}`);
+
+  const status =
+    analise.validacao.status === 'aprovado'
+      ? 'approved'
+      : 'needs_review';
+
+  const extractedData = {
+    source: 'apsa',
+    parser_version: '1.0.0',
+    pdf_sha256: hashPdf,
+
+    lancamentos: analise.lancamentos,
+
+    totals: {
+      boleto: analise.totais.boleto,
+      lancamentos: analise.totais.lancamentos,
+      inquilino: analise.totais.inquilino,
+      proprietario: analise.totais.proprietario,
+      revisar: analise.totais.revisar,
+      diferenca: analise.totais.diferenca
+    },
+
+    validation: analise.validacao,
+
+    tenant_amount: analise.totais.inquilino,
+    owner_amount: analise.totais.proprietario,
+
+    imported_at: new Date().toISOString()
+  };
+
+  console.log('Criando registro na tabela invoices...');
+
+  const { data: novaFatura, error: erroInsert } =
+    await supabaseAdmin
+      .from('invoices')
+      .insert({
+        owner_id: despesa.owner_id,
+        property_expense_id: despesa.id,
+        invoice_number: numeroFatura,
+        amount: analise.totais.boleto,
+        status,
+        storage_path: arquivo.path,
+        original_filename: nomeArquivo,
+        source_url: APSA_URL,
+        extracted_data: extractedData
+      })
+      .select('id, invoice_number, amount, status, storage_path')
+      .single();
+
+  if (erroInsert) {
+    /*
+     * Se o banco falhar depois do upload, exclui o arquivo
+     * para não deixar PDF órfão no Storage.
+     */
+    await supabaseAdmin.storage
+      .from('invoices')
+      .remove([arquivo.path]);
+
+    throw new Error(
+      `Erro ao criar fatura: ${erroInsert.message}`
+    );
+  }
+
+  console.log('Fatura criada no Supabase.');
+  console.log(`Invoice ID: ${novaFatura.id}`);
+  console.log(`Número: ${novaFatura.invoice_number}`);
+  console.log(`Status: ${novaFatura.status}`);
+  console.log(
+    `Total: ${novaFatura.amount.toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    })}`
+  );
+
+  console.log(
+    `Inquilino: ${analise.totais.inquilino.toLocaleString(
+      'pt-BR',
+      {
+        style: 'currency',
+        currency: 'BRL'
+      }
+    )}`
+  );
+
+  console.log(
+    `Proprietário: ${analise.totais.proprietario.toLocaleString(
+      'pt-BR',
+      {
+        style: 'currency',
+        currency: 'BRL'
+      }
+    )}`
+  );
+
+  return {
+    duplicado: false,
+    invoice_id: novaFatura.id,
+    storage_path: novaFatura.storage_path
+  };
+}
 
 const browser = await chromium.launch({
   headless: true
@@ -588,6 +810,21 @@ await fs.writeFile(
 );
 
 console.log('Resumo salvo em resumo-apsa.json');
+
+console.log('Gravando fatura APSA no Supabase...');
+
+const resultadoSupabase =
+  await gravarFaturaNoSupabase(pdfBuffer, analise);
+
+if (resultadoSupabase.duplicado) {
+  console.log(
+    'Nenhuma nova fatura foi criada porque o boleto já existia.'
+  );
+} else {
+  console.log(
+    'Boleto APSA integrado ao ImobControl com sucesso.'
+  );
+}
   
 } else {
   console.log('A resposta PDF não foi detectada.');
